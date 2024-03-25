@@ -57,6 +57,16 @@ def make_request(year:int, cloudcover:float, geometry:str, sensor:str="SENTINEL-
     df = pd.concat(dfs)
     df.reset_index(inplace=True)   
     return df
+
+def select_ids(df:pd.DataFrame, number:int):
+    # TODO: Finish this function
+    """ Given a dataframe containing install candidates, return a list of indeces to be installed select @ random from the dataframe
+    Inputs: 
+        df: Panda Dataframe -> the dataframe we are going to randomly select data from
+        number_per_year: int -> 
+
+    """
+    pass
     
 
 def main():
@@ -66,6 +76,7 @@ def main():
         json_path = default_json_path
 
     gdf = import_mask_layer(json_path)
+    years_to_get = [2015, 2016, 2017] # get query year by year
     responses = make_request(2015, 20, get_wkt(gdf))
     print(responses)
 
