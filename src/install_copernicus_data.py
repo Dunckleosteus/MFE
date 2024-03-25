@@ -28,7 +28,7 @@ def import_mask_layer(path: str) -> gpd.geodataframe.GeoDataFrame:
     gdf_exploded = gdf.explode(index_parts=True)
     return gdf_exploded
 
-def make_request(start_year:int, end_year:int, cloudcover:float, geometry:str, sensor:str="SENTINEL-2"):
+def make_request(year:int, cloudcover:float, geometry:str, sensor:str="SENTINEL-2"):
     ''' Queries Copernicus and returns a pandas dataframe of the results
     Inputs:
         year: int -> the year we want to search over
@@ -40,9 +40,8 @@ def make_request(start_year:int, end_year:int, cloudcover:float, geometry:str, s
     '''
     assert cloudcover <= 100 and cloudcover >= 0, "Cloud cover must be between 0 and 100"
     # this is the initial search url, it will change over time as we look for "next" data
-    start_search_url = r"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=OData.CSC.Intersects(area=geography'SRID=4326;{}') and Collection/Name eq '{}' and ContentDate/Start gt {}-01-01T00:00:00.000Z and ContentDate/Start lt {}-12-01T00:00:00.000Z and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {})".format(geometry, sensor, start_year, end_year, cloudcover)
+    start_search_url = r"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=OData.CSC.Intersects(area=geography'SRID=4326;{}') and Collection/Name eq '{}' and ContentDate/Start gt {}-01-01T00:00:00.000Z and ContentDate/Start lt {}-12-01T00:00:00.000Z and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {})".format(geometry, sensor, year, year, cloudcover)
     url = start_search_url
-    print(url)
     dfs = [] # list containing pandas dataframes that will be concatenated @ the end
     while True: # while there is more data continue
         response = requests.get(url).json()
@@ -67,7 +66,7 @@ def main():
         json_path = default_json_path
 
     gdf = import_mask_layer(json_path)
-    responses = make_request(2015, 2017, 20, get_wkt(gdf))
+    responses = make_request(2015, 20, get_wkt(gdf))
     print(responses)
 
 if __name__ == "__main__":
