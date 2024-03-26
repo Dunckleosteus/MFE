@@ -4,32 +4,37 @@ import pandas as pd
 import geopandas as gpd
 import requests
 
+
 def get_wkt(gdf: gpd.geodataframe.GeoDataFrame) -> str:
-    ''' Input a GeoDataFrame and outputs string in wkt format compatible with Copernicus
+    """Input a GeoDataFrame and outputs string in wkt format compatible with Copernicus
     Inputs:
         gdf: GeoDataFrame, the geodataframe containing a geometry field
     Outputs:
         str: A string in wkt format usable by Copernicus
-    '''
+    """
     gdf_first_geometry = gdf.groupby(level=0).first()
     first_geometry_wkt = gdf_first_geometry.geometry.iloc[0].wkt
     return first_geometry_wkt
 
+
 def import_mask_layer(path: str) -> gpd.geodataframe.GeoDataFrame:
-    ''' Opens the geodataframe used as a mask
+    """Opens the geodataframe used as a mask
     Inputs:
         path: str -> path to geojson file
     Outputs:
         geodataframe
-    '''
+    """
     gdf = gpd.read_file(path)
-    gdf.crs = 'EPSG:4326'
-    ddf = gdf.set_crs('EPSG:4326', allow_override = True)
+    gdf.crs = "EPSG:4326"
+    ddf = gdf.set_crs("EPSG:4326", allow_override=True)
     gdf_exploded = gdf.explode(index_parts=True)
     return gdf_exploded
 
-def make_request(year:int, cloudcover:float, geometry:str, sensor:str="SENTINEL-2"):
-    ''' Queries Copernicus and returns a pandas dataframe of the results
+
+def make_request(
+    year: int, cloudcover: float, geometry: str, sensor: str = "SENTINEL-2"
+):
+    """Queries Copernicus and returns a pandas dataframe of the results
     Inputs:
         year: int -> the year we want to search over
         cloudcover: float -> maximum cloud cover between 0 and 100
@@ -37,48 +42,61 @@ def make_request(year:int, cloudcover:float, geometry:str, sensor:str="SENTINEL-
         sensor: str (default = "SENTINEL-2") -> filter based on the type of sensor
     Outputs:
         pandas dataframe
-    '''
-    assert cloudcover <= 100 and cloudcover >= 0, "Cloud cover must be between 0 and 100"
+    """
+    assert (
+        cloudcover <= 100 and cloudcover >= 0
+    ), "Cloud cover must be between 0 and 100"
     # this is the initial search url, it will change over time as we look for "next" data
-    start_search_url = r"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=OData.CSC.Intersects(area=geography'SRID=4326;{}') and Collection/Name eq '{}' and ContentDate/Start gt {}-01-01T00:00:00.000Z and ContentDate/Start lt {}-12-01T00:00:00.000Z and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {})".format(geometry, sensor, year, year, cloudcover)
+    start_search_url = r"https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=OData.CSC.Intersects(area=geography'SRID=4326;{}') and Collection/Name eq '{}' and ContentDate/Start gt {}-01-01T00:00:00.000Z and ContentDate/Start lt {}-12-01T00:00:00.000Z and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {})".format(
+        geometry, sensor, year, year, cloudcover
+    )
     url = start_search_url
-    dfs = [] # list containing pandas dataframes that will be concatenated @ the end
-    while True: # while there is more data continue
+    dfs = []  # list containing pandas dataframes that will be concatenated @ the end
+    while True:  # while there is more data continue
         response = requests.get(url).json()
 
         try:
-            next_value = response['@odata.nextLink']
+            next_value = response["@odata.nextLink"]
             url = r"{}".format(next_value)
-            dfs.append(pd.DataFrame.from_dict(response['value']))
+            dfs.append(pd.DataFrame.from_dict(response["value"]))
         except:
-            dfs.append(pd.DataFrame.from_dict(response['value']))
+            dfs.append(pd.DataFrame.from_dict(response["value"]))
             break
 
     df = pd.concat(dfs)
-    df.reset_index(inplace=True)   
+    df.reset_index(inplace=True)
     return df
 
-def select_ids(df:pd.DataFrame, number:int):
-    # TODO: Finish this function
-    """ Given a dataframe containing install candidates, return a list of indeces to be installed select @ random from the dataframe
-    Inputs: 
-        df: Panda Dataframe -> the dataframe we are going to randomly select data from
-        number_per_year: int -> 
 
+def select_ids(df: pd.DataFrame, number: int) -> pd.core.frame.DataFrame:
+    # TODO: Finish this function
+    """Given a dataframe containing install candidates, return a list of indeces to be installed select @ random from the dataframe
+    Inputs:
+        df: Panda Dataframe -> the dataframe we are going to randomly select data from
+        number: int -> The maximum number of measurements per year
+    Outputs:
+        Pandas dataframe ["Id", "Name", "Footprint"] and of length number
     """
-    pass
-    
+    # sort the dataframe by data
+    df["OriginDate"] = pd.to_datetime(df["OriginDate"])
+    df.sort_values(by=["OriginDate"], inplace=True)
+    return df.loc[:, ["Id", "Name", "Footprint"]][:number]
+
 
 def main():
     json_path = input("Input location to json mask: ")
-    default_json_path = os.path.join("..", "sections_mfe", "buffers", "A43_33_44_short.geojson")
-    if json_path == '':
+    default_json_path = os.path.join(
+        "..", "sections_mfe", "buffers", "A43_33_44_short.geojson"
+    )
+    if json_path == "":
         json_path = default_json_path
 
     gdf = import_mask_layer(json_path)
-    years_to_get = [2015, 2016, 2017] # get query year by year
-    responses = make_request(2015, 20, get_wkt(gdf))
-    print(responses)
+    years_to_get = [2015, 2016, 2017]  # get query year by year
+
+    data_per_year = [make_request(x, 20, get_wkt(gdf)) for x in years_to_get]
+    print(type(select_ids(data_per_year[0], 2)))
+
 
 if __name__ == "__main__":
     main()
