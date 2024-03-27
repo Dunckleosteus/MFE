@@ -1,4 +1,6 @@
 import tqdm # used for progress bars
+import rasterio
+from rasterio import mask
 import glob
 import zipfile # unzip installed data
 import numpy as np
@@ -231,6 +233,44 @@ def create_path_dict(path:str) -> dict:
     print(type(path_dict))
     return path_dict
 
+def save_raster_to_file(path: str, image, transform) -> bool: 
+    new_dataset = rasterio.open(
+        path,
+        'w',
+        driver = 'GTiff',
+        height = image.squeeze().shape[0],
+        width = image.squeeze().shape[1],
+        count = 1,
+        nodata = None,
+        dtype = image.dtype,
+        transform = transform,
+    )
+
+    new_dataset.write(image.squeeze(), 1)
+    new_dataset.close()
+    return True
+
+
+def clip_rasters(path_dict: dict, output_path: str, mask: gpd.geodataframe.GeoDataFrame):
+    clipped_location = [] # list storing where the clipped rasters are saved
+    keys = path_dict.keys()
+    for key, value in path_dict.items():
+        # Applying mask to the rasters
+        band, transform = rasterio.mask.mask(
+            rasterio.open(value),
+            mask.geometry, # <- mask
+            crop = True,
+            all_touched = True # also keeps the pixels that are touched
+        )
+        
+        path = os.path.join(output_path, f"{key}.tif")
+        save_raster_to_file(path, band, transform)
+
+        clipped_location.append(path)
+
+    # making file new dictionary containg path to clipped rasters
+    return dict(zip(keys, clipped_location))
+
 
 persist = True # stops the install and the purge of the cache to avoid installing data 
 def main():
@@ -291,9 +331,20 @@ def main():
                 os.path.join(cache, str(year), f"{name}.zip"), 
                 os.path.join(cache, str(year), "sisi")
             )
+
             print("-> Deleting zip file: ", end ="")
             delete_file_if_exists(os.path.join(cache, str(year), f"{name}.zip"))
             l = create_path_dict(os.path.join(cache, str(year), "sisi", "*/GRANULE/*/IMG_DATA*/*"))
+
+            # gdf needs to projected to the crs of the satellite images
+            gdf_proj = gdf.to_crs("EPSG:32631")
+
+
+            print("-> Making clipped folder ", end="")
+            clipped_raster_path = os.path.join(output_folder, "clipped", str(year), name)
+            create_folder_if_not_exist(clipped_raster_path)
+            clipped_dict:dict = clip_rasters(l, clipped_raster_path, gdf_proj)
+            print(clipped_dict)
         
             # sisi/*/GRANULE/*/IMG_DATA/*
             # now that the folders are unzipped, we need to trim them
