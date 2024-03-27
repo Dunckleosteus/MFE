@@ -1,8 +1,23 @@
 import numpy as np
+import shutil # for deleting directories
 import os
 import pandas as pd
 import geopandas as gpd
 import requests
+
+def generate_output(func):
+    """ Decorator that returns a ✅ if a function returns boolean true or ❌ in the other case
+    Inputs: 
+        func: Function -> function that needs to be wrapped
+    Outputs: 
+        Function
+    """
+    def wrapper(*args, **kwargs):
+        if func(*args, **kwargs):
+            print("✔")
+        else: 
+            print("❌") 
+    return wrapper
 
 
 def get_wkt(gdf: gpd.geodataframe.GeoDataFrame) -> str:
@@ -122,6 +137,34 @@ def get_credentials_from_file(path: str) -> (str, str):
         password: str = f.readline()
         return (email, password)
 
+@generate_output
+def create_folder_if_not_exist(path: str)->bool:
+    """ Creates a folder in a given location if it does not already exist
+    Inputs: 
+        path: str -> path where folder should be created
+    Outputs:
+        bool -> True if folder was created, False if there was already a folder and nothing was created
+    """
+    created:bool=False
+    if not os.path.exists(path):
+        created=True
+        os.makedirs(path)
+    return created
+
+@generate_output
+def delete_folder_if_exists(path: str)->bool:
+    """ Will look for a folder @ a given path and delete it & all it's contents if it's there
+    Inputs: 
+        path: str -> path where folder should be deleted if it exists
+    Outputs:
+        bool -> True if folder was found & destroyed, False if no folder was found & nothing was deleted
+    """
+    deleted:bool=False
+    if os.path.exists(path):
+        shutil.rmtree(path)
+        deleted = True
+    return deleted
+        
 
 def main():
     json_path = input("Input location to json mask: ")
@@ -151,6 +194,17 @@ def main():
     data_per_year_selected: list = [select_ids(x, 3) for x in data_per_year]
 
     # downloading data
+    cache = os.path.join("cache") # downloaded data will temporarily be stored here
+    print(f"-> Delete cache folder: ", end="")
+    delete_folder_if_exists(cache)
+    
+    print(f"-> Create new cache folder ", end="")
+    create_folder_if_not_exist(cache) # after making sure it was deleted the cache can be created again
+
+    output_folder = os.path.join("output")
+    print(f"-> Create output folder: ", end="")
+    create_folder_if_not_exist(output_folder)
+
     for dataframe in data_per_year_selected:
         for row in dataframe:
             # TODO: install data
