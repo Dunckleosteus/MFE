@@ -1,4 +1,5 @@
 import tqdm # used for progress bars
+import glob
 import zipfile # unzip installed data
 import numpy as np
 import shutil # for deleting directories
@@ -167,6 +168,20 @@ def delete_folder_if_exists(path: str)->bool:
         deleted = True
     return deleted
 
+@generate_output
+def delete_file_if_exists(path: str)->bool:
+    """ Will look for a file @ a given path and delete it & all it's contents if it's there
+    Inputs: 
+        path: str -> path where file should be deleted if it exists
+    Outputs:
+        bool -> True if file was found & destroyed, False if no file was found & nothing was deleted
+    """
+    deleted: bool = False
+    if os.path.exists(path):
+        os.remove(path)
+        deleted = True
+    return deleted
+
 def download_by_id(id:str, path:str, access_token:str):
     """ Accepts and id, saves to given location
     Inputs: 
@@ -195,9 +210,27 @@ def unzip_folder(zip_folder_path: str, zip_to: str):
         zip_to: str -> path to where the zip file should be extracted to
     Outputs:
     """
-    with zipfile.ZipFile(zip_folder_path, 'r') as zip_ref:
-        zip_ref.extractall(zip_to)
-    return True
+    try: 
+        with zipfile.ZipFile(zip_folder_path, 'r') as zip_ref:
+            zip_ref.extractall(zip_to)
+        return True
+    except: 
+        return False
+
+def create_path_dict(path:str) -> dict: 
+    """ Returns a dict of paths assosiated to band type
+    Inputs: 
+        path: str -> path to the folder containing band data
+    """
+    l = glob.glob(path) # glob.glob -> glob
+
+    l.sort()
+    
+    keys = ["B01_path", "B02_path", "B03_path", "B04_path", "B05_path", "B06_path", "B07_path", "B08_path", "B09_path", "B10_path", "B11_path", "B12_path", "B8A_path", "TCI_path"]
+    path_dict = dict(zip(keys[:-1], l[:-1]))
+    print(type(path_dict))
+    return path_dict
+
 
 persist = True # stops the install and the purge of the cache to avoid installing data 
 def main():
@@ -258,6 +291,12 @@ def main():
                 os.path.join(cache, str(year), f"{name}.zip"), 
                 os.path.join(cache, str(year), "sisi")
             )
+            print("-> Deleting zip file: ", end ="")
+            delete_file_if_exists(os.path.join(cache, str(year), f"{name}.zip"))
+            l = create_path_dict(os.path.join(cache, str(year), "sisi", "*/GRANULE/*/IMG_DATA*/*"))
+        
+            # sisi/*/GRANULE/*/IMG_DATA/*
+            # now that the folders are unzipped, we need to trim them
 
 
 if __name__ == "__main__":
