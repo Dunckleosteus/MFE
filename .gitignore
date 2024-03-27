@@ -5,3 +5,5 @@ mydata/*
 Snipped/*
 cleaned/*
 resampled/*
+src/output/*
+src/cache/*

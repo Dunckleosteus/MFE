@@ -1,3 +1,4 @@
+import tqdm # used for progress bars
 import numpy as np
 import shutil # for deleting directories
 import os
@@ -164,7 +165,27 @@ def delete_folder_if_exists(path: str)->bool:
         shutil.rmtree(path)
         deleted = True
     return deleted
-        
+
+def download_by_id(id:str, path:str, access_token:str):
+    """ Accepts and id, saves to given location
+    Inputs: 
+        id: str -> the index of data to be downloaded
+        path: str -> the file path it needs to be installed to
+        access_token: str -> see get_access_token, required for install
+    Outputs: 
+    """
+    url = f"https://zipper.dataspace.copernicus.eu/odata/v1/Products({id})/$value"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    session = requests.Session()
+    session.headers.update(headers)
+    response = session.get(url, headers=headers, stream=True)
+
+    with open(path, "wb") as file:
+        for chunk in tqdm.tqdm(response.iter_content(chunk_size=8192)):
+            if chunk:
+                file.write(chunk)
+     
 
 def main():
     json_path = input("Input location to json mask: ")
@@ -188,10 +209,10 @@ def main():
     gdf = import_mask_layer(json_path)
     print("✔")
 
-    years_to_get = [2015, 2016, 2017]  # get query year by year
+    years_to_get = [2015]  # get query year by year
     data_per_year: list = [make_request(x, 20, get_wkt(gdf)) for x in years_to_get]
     # TODO: filter dataframes by geometry to ensure a complete overlap
-    data_per_year_selected: list = [select_ids(x, 3) for x in data_per_year]
+    data_per_year_selected: list = [select_ids(x, 1) for x in data_per_year]
 
     # downloading data
     cache = os.path.join("cache") # downloaded data will temporarily be stored here
@@ -205,10 +226,14 @@ def main():
     print(f"-> Create output folder: ", end="")
     create_folder_if_not_exist(output_folder)
 
-    for dataframe in data_per_year_selected:
-        for row in dataframe:
-            # TODO: install data
-            pass
+    for num_year, (year, dataframe) in enumerate(zip(years_to_get, data_per_year_selected)):
+        print(f"-> Installing year {num_year}/{len(years_to_get)}")
+        indeces = dataframe["Id"]
+        names = dataframe["Name"]
+        create_folder_if_not_exist(os.path.join(cache, str(year)))
+        for num, (name, id) in enumerate(zip(names, indeces)):
+            print(f"---> Installing file {num} out of {len(names)} in {year}")
+            download_by_id(id, os.path.join(cache, str(year), f"{name}.zip") , access_token)
 
 
 if __name__ == "__main__":
