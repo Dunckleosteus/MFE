@@ -1,4 +1,5 @@
 import tqdm # used for progress bars
+import zipfile # unzip installed data
 import numpy as np
 import shutil # for deleting directories
 import os
@@ -185,8 +186,20 @@ def download_by_id(id:str, path:str, access_token:str):
         for chunk in tqdm.tqdm(response.iter_content(chunk_size=8192)):
             if chunk:
                 file.write(chunk)
-     
 
+@generate_output     
+def unzip_folder(zip_folder_path: str, zip_to: str): 
+    """ Unzips
+    Inputs:
+        zip_folder_path: str -> path to zip file
+        zip_to: str -> path to where the zip file should be extracted to
+    Outputs:
+    """
+    with zipfile.ZipFile(zip_folder_path, 'r') as zip_ref:
+        zip_ref.extractall(zip_to)
+    return True
+
+persist = True # stops the install and the purge of the cache to avoid installing data 
 def main():
     json_path = input("Input location to json mask: ")
     default_json_path = os.path.join(
@@ -216,8 +229,9 @@ def main():
 
     # downloading data
     cache = os.path.join("cache") # downloaded data will temporarily be stored here
-    print(f"-> Delete cache folder: ", end="")
-    delete_folder_if_exists(cache)
+    if persist == False:
+        print(f"-> Delete cache folder: ", end="")
+        delete_folder_if_exists(cache)
     
     print(f"-> Create new cache folder ", end="")
     create_folder_if_not_exist(cache) # after making sure it was deleted the cache can be created again
@@ -226,6 +240,7 @@ def main():
     print(f"-> Create output folder: ", end="")
     create_folder_if_not_exist(output_folder)
 
+
     for num_year, (year, dataframe) in enumerate(zip(years_to_get, data_per_year_selected)):
         print(f"-> Installing year {num_year}/{len(years_to_get)}")
         indeces = dataframe["Id"]
@@ -233,7 +248,16 @@ def main():
         create_folder_if_not_exist(os.path.join(cache, str(year)))
         for num, (name, id) in enumerate(zip(names, indeces)):
             print(f"---> Installing file {num} out of {len(names)} in {year}")
-            download_by_id(id, os.path.join(cache, str(year), f"{name}.zip") , access_token)
+            if persist == False:
+                download_by_id(id, os.path.join(cache, str(year), f"{name}.zip") , access_token)
+            else: 
+                print("-> Skipping install")
+            # now that the zip file is installed, unzip it
+            print("Unzipping folder: ", end="")
+            unzip_folder(
+                os.path.join(cache, str(year), f"{name}.zip"), 
+                os.path.join(cache, str(year), "sisi")
+            )
 
 
 if __name__ == "__main__":
