@@ -301,7 +301,7 @@ def clip_rasters(
     return dict(zip(keys, clipped_location))
 
 
-persist = False
+persist = False # for debuggin purposes
 
 
 def main():
@@ -330,7 +330,8 @@ def main():
     data_per_year: list = [make_request(
         x, 20, get_wkt(gdf)) for x in years_to_get]
     # TODO: filter dataframes by geometry to ensure a complete overlap
-    data_per_year_selected: list = [select_ids(x, 1) for x in data_per_year]
+    number_of_images_per_year = 5
+    data_per_year_selected: list = [select_ids(x, number_of_images_per_year) for x in data_per_year]
 
     # downloading data
     # downloaded data will temporarily be stored here
@@ -344,8 +345,6 @@ def main():
     create_folder_if_not_exist(cache)
 
     output_folder = os.path.join("output")
-    print("-> Create output folder: ", end="")
-    create_folder_if_not_exist(output_folder)
 
     for num_year, (year, dataframe) in enumerate(
         zip(
@@ -354,59 +353,73 @@ def main():
         )
     ):
 
+        # Create the output folder if it does not exist
+        print("-> Create output folder: ", end="")
+        create_folder_if_not_exist(output_folder)
+
         print(f"-> Installing year {num_year}/{len(years_to_get)}")
         indices = dataframe["Id"]
         names = dataframe["Name"]
-        create_folder_if_not_exist(os.path.join(cache, str(year)))
         for num, (name, id) in enumerate(zip(names, indices)):
-            print(f"---> Installing file {num} out of {len(names)} in {year}")
+            create_folder_if_not_exist(os.path.join(cache, str(year)))
+            # TODO: check to see if there is a folder of the same name as the one we want to install,
+            # if there is, skip install, unzipp & all and move onto next
+            exists = False
+            clipped_raster_path = os.path.join(output_folder, "clipped", str(year), name)
+            if os.path.exists(clipped_raster_path):
+                exists = True
 
-            if persist is False:
-                download_by_id(id, os.path.join(
-                    cache, str(year), f"{name}.zip"), access_token)
-            else:
-                print("-> Skipping install")
 
-            # now that the zip file is installed, unzip it
-            print("Unzipping folder: ", end="")
-            unzip_folder(
-                os.path.join(cache, str(year), f"{name}.zip"),
-                os.path.join(cache, str(year), "sisi")
-            )
+            if exists == False: 
+                print(f"---> Installing file {num} out of {len(names)} in {year}")
 
-            print("-> Deleting zip file: ", end="")
-            delete_file_if_exists(os.path.join(
-                cache, str(year), f"{name}.zip"))
-            band_dictionary = create_path_dict(
-                os.path.join(
-                    cache,
-                    str(year),
-                    "sisi", "*/GRANULE/*/IMG_DATA*/*"
+                if persist is False:
+                    download_by_id(id, os.path.join(
+                        cache, str(year), f"{name}.zip"), access_token)
+                else:
+                    print("-> Skipping install")
+
+                # now that the zip file is installed, unzip it
+                print("Unzipping folder: ", end="")
+                unzip_folder(
+                    os.path.join(cache, str(year), f"{name}.zip"),
+                    os.path.join(cache, str(year), "sisi")
                 )
-            )
 
-            # gdf needs to projected to the crs of the satellite images
-            gdf_proj = gdf.to_crs("EPSG:32631")
+                print("-> Deleting zip file: ", end="")
+                delete_file_if_exists(os.path.join(
+                    cache, str(year), f"{name}.zip"))
+                band_dictionary = create_path_dict(
+                    os.path.join(
+                        cache,
+                        str(year),
+                        "sisi", "*/GRANULE/*/IMG_DATA*/*"
+                    )
+                )
 
-            print("-> Making clipped folder ", end="")
-            clipped_raster_path = os.path.join(
-                output_folder, "clipped", str(year), name)
-            create_folder_if_not_exist(clipped_raster_path)
-            # TODO: clip rasters returns a dictionary of clipped features
-            clip_rasters(band_dictionary, clipped_raster_path, gdf_proj)
+                # gdf needs to projected to the crs of the satellite images
+                gdf_proj = gdf.to_crs("EPSG:32631")
 
-            # TODO: resample
-            # TODO: clean
+                print("-> Making clipped folder ", end="")
+                # clipped_raster_path = os.path.join(output_folder, "clipped", str(year), name)
+                create_folder_if_not_exist(clipped_raster_path)
+                # TODO: clip rasters returns a dictionary of clipped features
+                clip_rasters(band_dictionary, clipped_raster_path, gdf_proj)
 
-            # purge cache
-            if persist is False:
-                access_token = get_access_token(
-                    email, password
-                )  # may have expired
-                print("-> Purging cache for next iteration ", end="")
-                delete_folder_if_exists(cache)
-                print("-> Regenerating cache for next iteration ", end="")
-                create_folder_if_not_exist(cache)
+                # TODO: resample
+                # TODO: clean
+
+                # purge cache
+                if persist is False:
+                    access_token = get_access_token(
+                        email, password
+                    )  # may have expired
+                    print("-> Purging cache for next iteration ", end="")
+                    delete_folder_if_exists(cache)
+                    print("-> Regenerating cache for next iteration ", end="")
+                    create_folder_if_not_exist(cache)
+            else:
+                print("File already exists in output, moving on")
 
 
 if __name__ == "__main__":
