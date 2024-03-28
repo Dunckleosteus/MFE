@@ -7,5 +7,5 @@ cleaned/*
 resampled/*
 src/output/*
 src/cache/*
-*.swo
-*.swp
+*.py.swo
+*.py.swp

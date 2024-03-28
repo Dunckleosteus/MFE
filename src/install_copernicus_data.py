@@ -1,4 +1,5 @@
 import tqdm  # used for progress bars
+import sys # used for command line arguments when calling script
 import rasterio
 from rasterio import mask
 import glob
@@ -19,6 +20,7 @@ def generate_output(func):
         Function
     """
     def wrapper(*args, **kwargs):
+        print(f"{func.__name__}: ", end="")
         if func(*args, **kwargs):
             print("✔")
         else:
@@ -300,64 +302,79 @@ def clip_rasters(
     # making file new dictionary containing path to clipped rasters
     return dict(zip(keys, clipped_location))
 
+def handle_arguments(): 
+    """ Run at the start of the execution to handle command line arguments
+    Inputs: 
+        None
+    Outputs: 
+        (measurements per year: int, years)
+    """
+    arguments = sys.argv
+    assert len(arguments) > 2, "Missing arguments, require <Number per year> year year year ..."
+    number_per_year = arguments[1]
+    years = arguments[2:]
+    return int(number_per_year), [int(year) for year in years]
+
 
 persist = False # for debuggin purposes
 
 
 def main():
+
+    # opening mask layer
     json_path = input("Input location to json mask: ")
     default_json_path = os.path.join(
         "..", "sections_mfe", "buffers", "A43_33_44_short.geojson"
     )
     if json_path == "":
         json_path = default_json_path
+    try:
+        gdf = import_mask_layer(json_path)
+    except:
+        sys.exit("Could not open mask layer")
 
+    # Credentials are stored in file, getting them
     credential_file_path = input("Input location of credential file: ")
     default_credential_file_path = os.path.join("..", "mydata", "pass.txt")
     if credential_file_path == "":
         credential_file_path = default_credential_file_path
-
     email, password = get_credentials_from_file(credential_file_path)
-    print("-> Getting Access token ", end="")
+
+    # Using credentials, generate access token
+    print("-> Getting Access token ", )
     access_token = get_access_token(email, password)
     print("✔")
 
-    print("-> Opening mask layer ", end="")
-    gdf = import_mask_layer(json_path)
-    print("✔")
+    # Getting years to look @ and number of values per year from command line args
+    number_of_images_per_year, years_to_get = handle_arguments()
 
-    years_to_get = [2015, 2016]  # get query year by year
+    # Query the Copernicus datase, save results to dataframe for later selection
     data_per_year: list = [make_request(
         x, 20, get_wkt(gdf)) for x in years_to_get]
     # TODO: filter dataframes by geometry to ensure a complete overlap
-    number_of_images_per_year = 5
     data_per_year_selected: list = [select_ids(x, number_of_images_per_year) for x in data_per_year]
 
-    # downloading data
-    # downloaded data will temporarily be stored here
+    # downloading data, downloaded data will temporarily in cache
     cache = os.path.join("cache")
     if persist is False:
-        print("-> Delete cache folder: ", end="")
+        print("-> Delete cache folder: ", )
         delete_folder_if_exists(cache)
-
-    print("-> Create new cache folder ", end="")
-    # after making sure it was deleted the cache can be created again
+    print("-> Create new cache folder ", )
     create_folder_if_not_exist(cache)
 
+    # Final result will be stored in output folder
     output_folder = os.path.join("output")
-
     for num_year, (year, dataframe) in enumerate(
         zip(
             years_to_get,
             data_per_year_selected
         )
     ):
-
         # Create the output folder if it does not exist
-        print("-> Create output folder: ", end="")
+        print("-> Create output folder: ", )
         create_folder_if_not_exist(output_folder)
 
-        print(f"-> Installing year {num_year}/{len(years_to_get)}")
+        print(f"-> Installing year {num_year + 1}/{len(years_to_get)}")
         indices = dataframe["Id"]
         names = dataframe["Name"]
         for num, (name, id) in enumerate(zip(names, indices)):
@@ -371,7 +388,7 @@ def main():
 
 
             if exists == False: 
-                print(f"---> Installing file {num} out of {len(names)} in {year}")
+                print(f"---> Installing file {num + 1} out of {len(names)} in {year}")
 
                 if persist is False:
                     download_by_id(id, os.path.join(
@@ -380,13 +397,13 @@ def main():
                     print("-> Skipping install")
 
                 # now that the zip file is installed, unzip it
-                print("Unzipping folder: ", end="")
+                print("Unzipping folder: ", )
                 unzip_folder(
                     os.path.join(cache, str(year), f"{name}.zip"),
                     os.path.join(cache, str(year), "sisi")
                 )
 
-                print("-> Deleting zip file: ", end="")
+                print("-> Deleting zip file: ", )
                 delete_file_if_exists(os.path.join(
                     cache, str(year), f"{name}.zip"))
                 band_dictionary = create_path_dict(
@@ -400,7 +417,7 @@ def main():
                 # gdf needs to projected to the crs of the satellite images
                 gdf_proj = gdf.to_crs("EPSG:32631")
 
-                print("-> Making clipped folder ", end="")
+                print("-> Making clipped folder ", )
                 # clipped_raster_path = os.path.join(output_folder, "clipped", str(year), name)
                 create_folder_if_not_exist(clipped_raster_path)
                 # TODO: clip rasters returns a dictionary of clipped features
@@ -414,9 +431,9 @@ def main():
                     access_token = get_access_token(
                         email, password
                     )  # may have expired
-                    print("-> Purging cache for next iteration ", end="")
+                    print("-> Purging cache for next iteration ", )
                     delete_folder_if_exists(cache)
-                    print("-> Regenerating cache for next iteration ", end="")
+                    print("-> Regenerating cache for next iteration ", )
                     create_folder_if_not_exist(cache)
             else:
                 print("File already exists in output, moving on")
