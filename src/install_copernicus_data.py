@@ -93,7 +93,6 @@ def make_request(
 
 
 def select_ids(df: pd.DataFrame, number: int) -> pd.core.frame.DataFrame:
-    # TODO: Finish this function
     """Given a dataframe containing install candidates, return a list of
     indices to be installed select @ random from the dataframe
     Inputs:
@@ -103,7 +102,7 @@ def select_ids(df: pd.DataFrame, number: int) -> pd.core.frame.DataFrame:
     Outputs:
         Pandas dataframe ["Id", "Name", "Footprint"] and of length number
     """
-    # sort the dataframe by data
+    # sort the dataframe by origin data
     df["OriginDate"] = pd.to_datetime(df["OriginDate"])
     df.sort_values(by=["OriginDate"], inplace=True)
     return df.loc[:, ["Id", "Name", "Footprint"]][:number]
@@ -261,6 +260,7 @@ def create_path_dict(path: str) -> dict:
     return path_dict
 
 
+@generate_output
 def save_raster_to_file(path: str, image, transform) -> bool:
     new_dataset = rasterio.open(
         path,
@@ -410,7 +410,7 @@ def main():
                     os.path.join(
                         cache,
                         str(year),
-                        "sisi", "*/GRANULE/*/IMG_DATA*/*"
+                        "sisi", "*/GRANULE/*/IMG_DATA*/*.jp2"
                     )
                 )
 
